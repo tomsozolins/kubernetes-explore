@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+#
+# Read-only kubectl wrapper. The single choke point for cluster access. It pins
+# one kubeconfig — $HOME/.kube/ai-agent.kubeconfig — and refuses to run unless
+# that file authenticates as the ai-agent ServiceAccount in the default
+# namespace with an *expiring* token. The wrapper does NOT mint anything:
+# provisioning that kubeconfig (with a temporary token for the ai-agent SA) is
+# done out of band.
+#
+# On every call the wrapper:
+#   1. requires $HOME/.kube/ai-agent.kubeconfig to exist,
+#   2. scrubs KUBECONFIG from the environment and rejects flags that could
+#      redirect to another cluster/identity, so the pinned file is the ONLY
+#      kubeconfig in effect — no overrides,
+#   3. proves the token is LIVE and belongs to the ai-agent SA via a single
+#      `auth whoami` round-trip (live = the call succeeds; right identity = the
+#      reported username is the SA's),
+#   4. requires the token to carry an expiration ('exp' claim) — non-expiring
+#      (legacy/static) credentials are rejected and the wrapper fails hard,
+#   5. enumerates the token's effective RBAC ('auth can-i --list') and refuses
+#      if any resource grant carries a write verb — read-only must hold even
+#      when the kubeconfig was provisioned by hand against an SA that someone
+#      (mis)bound to a writing role,
+# then execs kubectl against the pinned file. Read-only is ultimately enforced
+# server-side by the SA's RBAC; step 5 re-checks it here as defense in depth so
+# a mis-provisioned write-capable token is refused up front rather than trusted.
+# Every failure prints how to mint a fresh temporary token.
+#
+import base64
+import json
+import os
+import re
+import subprocess
+import sys
+from typing import NoReturn
+
+KUBECONFIG = os.path.join(os.path.expanduser("~"), ".kube", "ai-agent.kubeconfig")
+SA, NS = "ai-agent", "default"
+EXPECTED_USER = f"system:serviceaccount:{NS}:{SA}"
+
+# Flags that could escape the read-only context by redirecting cluster/identity.
+BLOCKED = {
+    "--kubeconfig", "--context", "--server", "--token",
+    "--user", "--as", "--as-group",
+}
+
+# Verbs that mutate cluster state. If the SA's RBAC grants any of these (or a
+# '*' wildcard) on a real resource, it is not read-only.
+WRITE_VERBS = {"create", "update", "patch", "delete", "deletecollection", "*"}
+
+# Resources every authenticated principal may 'create' by default: the
+# system:basic-user ClusterRole binds these self-review APIs so a client can
+# ask "what am I allowed to do" (this wrapper's own `auth can-i` relies on it).
+# A 'create' on them is not a cluster mutation, so they don't count as write.
+SELF_REVIEW_RESOURCES = {
+    "selfsubjectaccessreviews.authorization.k8s.io",
+    "selfsubjectrulesreviews.authorization.k8s.io",
+    "selfsubjectreviews.authentication.k8s.io",
+}
+
+# Shown on every failure: how to mint a fresh temporary token. The bundled
+# `kubeconfig-generator` (on PATH alongside this wrapper) issues a bound
+# (expiring) token via the TokenRequest API and writes it into the pinned
+# kubeconfig. Run with admin credentials (the read-only SA cannot mint its own
+# token); its current context supplies the cluster, server, and CA.
+PROVISION_HINT = (
+    "Mint a fresh temporary token and write the kubeconfig (admin credentials):\n"
+    "  kubeconfig-generator"
+)
+
+
+def die(msg, hint=True) -> NoReturn:
+    suffix = f"\n{PROVISION_HINT}" if hint else ""
+    sys.exit(f"kubectl-readonly: {msg}{suffix}")
+
+
+def pinned_env() -> dict:
+    """Environment with KUBECONFIG forced to the pinned file. Replacing any
+    inherited KUBECONFIG means the pinned kubeconfig is the only one kubectl can
+    see — env overrides are not allowed."""
+    return {**os.environ, "KUBECONFIG": KUBECONFIG}
+
+
+def pinned_token() -> str:
+    """The minified context's bearer token from the pinned file, for the expiry
+    check below. Missing/unparseable config yields an empty string; the caller
+    fails closed on that."""
+    proc = subprocess.run(
+        ["kubectl", "--kubeconfig", KUBECONFIG, "config", "view", "--raw",
+         "--minify", "-o", "json"],
+        capture_output=True, text=True, env=pinned_env(),
+    )
+    if proc.returncode != 0:
+        return ""
+    try:
+        cfg = json.loads(proc.stdout)
+    except (ValueError, TypeError):
+        return ""
+    user = (cfg.get("users") or [{}])[0].get("user") or {}
+    return user.get("token", "")
+
+
+def assert_active_sa_token():
+    """Fail closed unless the pinned kubeconfig holds a live token for the
+    ai-agent SA. `auth whoami` round-trips to the API server (proving the token
+    is live) and returns the authenticated identity (proving it's the SA, not
+    some other credential)."""
+    if not os.path.exists(KUBECONFIG):
+        die(f"no kubeconfig at {KUBECONFIG}.")
+    proc = subprocess.run(
+        ["kubectl", "--kubeconfig", KUBECONFIG, "auth", "whoami",
+         "-o", "jsonpath={.status.userInfo.username}"],
+        capture_output=True, text=True, env=pinned_env(),
+    )
+    if proc.returncode != 0:
+        die("the token is missing, expired, or the cluster is unreachable.\n"
+            f"kubectl said: {proc.stderr.strip()}")
+    user = proc.stdout.strip()
+    if user != EXPECTED_USER:
+        die(f"kubeconfig authenticates as '{user}', not the {SA} ServiceAccount "
+            f"('{EXPECTED_USER}').")
+
+
+def assert_token_expires(token):
+    """Reject any credential that lacks an expiration. Ephemeral, bound SA tokens
+    (from the TokenRequest API) carry an 'exp' claim; legacy static SA secrets
+    don't. Requiring expiry means a leaked token can't be replayed forever."""
+    if not token:
+        die("no bearer token in the kubeconfig; an expiring token is required.")
+    parts = token.split(".")
+    if len(parts) != 3:
+        die("the kubeconfig credential is not a JWT, so it carries no expiration.")
+    try:
+        payload = parts[1] + "=" * (-len(parts[1]) % 4)  # restore base64 padding
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+    except (ValueError, TypeError):
+        die("could not decode the token's claims to confirm it expires.")
+    if "exp" not in claims:
+        die("the token has no expiration ('exp' claim); non-expiring tokens "
+            "are rejected.")
+
+
+def assert_readonly_rbac():
+    """Fail closed unless the SA's RBAC is actually read-only. The identity and
+    expiry checks prove *who* holds the token and that it expires — not what it
+    may do. Nothing stops an operator from issuing the ai-agent kubeconfig
+    against an SA that was (mis)bound to a writing role like `edit` or
+    `cluster-admin`. So enumerate the token's effective permissions with
+    `auth can-i --list` (scoped to the SA's namespace, which also resolves
+    cluster-wide grants) and refuse if any resource grant carries a write
+    verb."""
+    proc = subprocess.run(
+        ["kubectl", "--kubeconfig", KUBECONFIG, "auth", "can-i", "--list",
+         "-n", NS],
+        capture_output=True, text=True, env=pinned_env(),
+    )
+    if proc.returncode != 0:
+        die("could not enumerate the token's RBAC to confirm it is read-only.\n"
+            f"kubectl said: {proc.stderr.strip()}")
+    # Each row is `<resource>  [<urls>]  [<names>]  [<verbs>]`; the verbs are the
+    # last bracket group. Rows beginning with '[' are non-resource URL grants
+    # (e.g. /healthz), which are get-only and irrelevant to write access.
+    for line in proc.stdout.splitlines():
+        brackets = re.findall(r"\[([^\]]*)\]", line)
+        tokens = line.split()
+        if not brackets or not tokens or tokens[0].startswith("["):
+            continue
+        resource = tokens[0]
+        if resource in SELF_REVIEW_RESOURCES:
+            continue
+        granted = set(brackets[-1].split()) & WRITE_VERBS
+        if granted:
+            die(f"the SA may {', '.join(sorted(granted))} '{resource}'; this "
+                "kubeconfig grants write access, but a read-only SA is required. "
+                "Bind the ai-agent SA to a read-only role and re-issue.",
+                hint=False)
+
+
+def main():
+    for arg in sys.argv[1:]:
+        if arg.split("=", 1)[0] in BLOCKED:
+            die(f"flag '{arg.split('=', 1)[0]}' is not allowed "
+                "(read-only context is fixed).", hint=False)
+
+    assert_active_sa_token()
+    assert_token_expires(pinned_token())
+    assert_readonly_rbac()
+    os.execvpe(
+        "kubectl",
+        ["kubectl", "--kubeconfig", KUBECONFIG, *sys.argv[1:]],
+        pinned_env(),
+    )
+
+
+if __name__ == "__main__":
+    main()

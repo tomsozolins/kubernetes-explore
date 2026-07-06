@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-agent
+  namespace: default
+  annotations:
+    description: >-
+      Read-only AI-agent identity; all access comes from the ai-agent-*
+      ClusterRoleBindings. Authenticated only via short-lived tokens minted
+      by kubeconfig-generator, never long-lived secrets.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-agent-view-binding
+subjects:
+  - kind: ServiceAccount
+    name: ai-agent
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-agent-nodes-view-binding
+subjects:
+  - kind: ServiceAccount
+    name: ai-agent
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: "eks:nodewatcher"
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ai-agent-proxy
+  annotations:
+    description: >-
+      GET-only apiserver proxy to Services and Pods, so ai-agent can reach
+      in-cluster HTTP APIs with no external route (Prometheus/Thanos, metrics
+      exporters). `view` omits the /proxy subresource; no exec, port-forward,
+      or write is granted.
+rules:
+  - apiGroups: [""]
+    resources: ["services/proxy", "pods/proxy"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-agent-proxy-binding
+subjects:
+  - kind: ServiceAccount
+    name: ai-agent
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: ai-agent-proxy
+  apiGroup: rbac.authorization.k8s.io
