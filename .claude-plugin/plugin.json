@@ -1,0 +1,8 @@
+{
+  "name": "kubernetes-explore",
+  "description": "A kubernetes explorer plugin",
+  "version": "0.0.1",
+  "author": {
+    "name": "kubernetes-explore"
+  }
+}
