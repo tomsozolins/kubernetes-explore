@@ -64,7 +64,7 @@ reference.
     "enabled": true,
     "autoAllowBashIfSandboxed": false,
     "allowUnsandboxedCommands": false,
-    "excludedCommands": ["kubeconfig-generator *"],
+    "excludedCommands": ["kubeconfig-generator"],
     "filesystem": {
       "denyRead": ["~/.aws", "~/.kube"],
       "allowRead": ["~/.kube/ai-agent.kubeconfig"]
@@ -91,7 +91,7 @@ real — without it, any command blocked by the sandbox could fall back to
 running unsandboxed, defeating the whole point. Every command must run
 sandboxed or be explicitly listed in `excludedCommands`.
 
-#### `excludedCommands: ["kubeconfig-generator *"]`
+#### `excludedCommands: ["kubeconfig-generator"]`
 
 `kubeconfig-generator` is the one command that legitimately *cannot* be
 sandboxed: it mints a fresh temporary token for the `ai-agent` ServiceAccount,
@@ -100,8 +100,10 @@ blocks by design — and writing `~/.kube/ai-agent.kubeconfig`. Listing it here
 lets it run outside the sandbox while still behind a permission prompt (because
 `autoAllowBashIfSandboxed` is `false`). Excluding this single command is far safer
 than `allowRead`-ing the admin config globally, which would let *any* sandboxed
-command read and exfiltrate it. The trailing `*` matches the command with any
-arguments.
+command read and exfiltrate it. The pattern has no trailing `*` because
+`kubeconfig-generator` takes no arguments — it's always invoked bare, so a
+`kubeconfig-generator *` pattern would never match and the command would fall
+back into the sandbox and fail.
 
 #### `filesystem.denyRead: ["~/.aws", "~/.kube"]`
 
