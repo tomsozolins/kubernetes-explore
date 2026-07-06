@@ -141,6 +141,11 @@ can't read its own kubeconfig and the plugin can't talk to the cluster at all.
   so every invocation runs in the matching subagent below and only a summary
   reaches the caller. `skills/events/references/` holds the query patterns
   and the event-reason catalog, grounded in kubernetes.io.
+- `skills/troubleshoot` — the orchestrator for open-ended "what's wrong with
+  X" investigations. It stays in the main conversation and fans out **all**
+  probes concurrently — the events, logs, and metrics subagents plus a
+  general-purpose object-state probe through `kubectl-readonly` — then
+  synthesizes the returned summaries into an evidence-backed cause.
 - `agents/metrics`, `agents/logs`, `agents/events` —
   sonnet-pinned subagents that run the noisy discovery and query churn in
   their own context; each preloads the `kubectl` skill plus its own.
