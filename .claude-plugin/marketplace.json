@@ -1,0 +1,13 @@
+{
+  "name": "kubernetes-explore",
+  "owner": {
+    "name": "tomsozolins"
+  },
+  "plugins": [
+    {
+      "name": "kubernetes-explore",
+      "source": "./",
+      "description": "A kubernetes explorer plugin"
+    }
+  ]
+}

@@ -11,6 +11,35 @@ read-only `ai-agent` ServiceAccount with a short-lived, expiring token, and it
 refuses to run if that token is missing, non-expiring, the wrong identity, or
 carries any write verb in its RBAC.
 
+## Install
+
+The repo doubles as its own plugin marketplace, so install it straight from
+git. In Claude Code, register the marketplace, then install the plugin from it:
+
+```text
+/plugin marketplace add https://github.com/tomsozolins/kubernetes-explore.git
+/plugin install kubernetes-explore@kubernetes-explore
+```
+
+The `@kubernetes-explore` suffix names the marketplace; the leading
+`kubernetes-explore` names the plugin (they coincide here). After installing,
+configure the sandbox (below) and mint the read-only kubeconfig with
+`kubeconfig-generator` before the skills can reach a cluster.
+
+## Update
+
+New versions land as commits that bump `version` in
+`.claude-plugin/plugin.json`. To pull the latest, refresh the marketplace and
+update the plugin from the `/plugin` menu:
+
+```text
+/plugin marketplace update kubernetes-explore
+/plugin update kubernetes-explore@kubernetes-explore
+```
+
+The first command re-fetches the catalog from git; the second upgrades the
+installed plugin to the version the refreshed catalog advertises.
+
 ## ⚠️ Configure sandbox mode — strongly recommended
 
 This plugin's read-only guarantee comes from the wrapper + RBAC. The OS-level
