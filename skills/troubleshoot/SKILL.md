@@ -72,6 +72,17 @@ concurrently in one message:
 - **Resource pressure suspected** → metrics is primary (working-set memory
   and CPU rate vs `kube_pod_container_resource_limits`, CPU throttling);
   `kubectl-readonly top` only as a quick cross-check.
+- **Errors despite a healthy-looking service** — 429s, "retry later" /
+  "too many requests" messages, intermittent or partial failures (some
+  widgets fail while the page loads), errors that track bursts of activity
+  or hit one user/IP while others are fine → suspect **policy rejection,
+  not breakage**. Have the metrics subagent discover throttle/rejection
+  counters by name (`throttle`, `rate_limit`, `reject`, …) and range-query
+  them over the incident window, correlated with the failing request paths.
+  Rate limiting is often visible *only* in metrics — no 5xx, passing
+  probes, and clean logs do not rule it out, and the limit config itself
+  is usually app-internal state you can't read (see hard constraints), so
+  the counters are the evidence.
 - **A config/limit value is in question** → prefer reading it from live
   state (CRDs, ConfigMaps via the object-state probe) or metrics over
   guessing defaults.
@@ -95,5 +106,8 @@ longer change the conclusion.
   object field behind it.
 - Separate **confirmed** from **inferred**, and call out where read-only
   access stopped short of certainty.
+- Distinguish **unhealthy** (5xx, restarts, OOM) from **healthy but
+  rejecting by policy** (throttling, quotas) — both present as the same
+  user-facing error, and conflating them sends the fix the wrong way.
 - Recommend next steps, flagging any that need write or admin access you
   lack.
