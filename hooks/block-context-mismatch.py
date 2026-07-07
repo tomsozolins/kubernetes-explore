@@ -132,19 +132,36 @@ def bash_command(stdin_json: object) -> str:
     return command if isinstance(command, str) else ""
 
 
-def context_server(extra_args, env):
-    """Server URL of the current context for the given kubectl args, or '' on any
-    failure — missing file, no current context, or kubectl not on PATH. Callers
-    treat '' as 'nothing to compare', leaving the wrapper's own asserts to fire."""
+def context_info(extra_args, env):
+    """(context_name, server_url) of the current context for the given kubectl
+    args, or ('', '') on any failure — missing file, no current context, or
+    kubectl not on PATH. The server URL is what actually decides a mismatch (EKS
+    reissues opaque `<hash>.gr7.<region>.eks.amazonaws.com` hostnames per
+    cluster); the context name is carried alongside only to make the message
+    legible, since it's the human-readable label the user set with
+    `use-context`. Callers treat '' server as 'nothing to compare', leaving the
+    wrapper's own asserts to fire. Name and server are emitted on their own
+    lines via jsonpath's `{"\\n"}` literal (neither value contains a newline);
+    fields are stripped individually so an empty context name can't shift the
+    server past a leading strip()."""
     try:
         proc = subprocess.run(
-            ["kubectl", *extra_args, "config", "view", "--minify",
-             "-o", "jsonpath={.clusters[0].cluster.server}"],
+            ["kubectl", *extra_args, "config", "view", "--minify", "-o",
+             'jsonpath={.contexts[0].name}{"\\n"}{.clusters[0].cluster.server}'],
             capture_output=True, text=True, env=env, timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
-        return ""
-    return proc.stdout.strip() if proc.returncode == 0 else ""
+        return "", ""
+    if proc.returncode != 0:
+        return "", ""
+    name, _, server = proc.stdout.partition("\n")
+    return name.strip(), server.strip()
+
+
+def _describe(name, server):
+    """One indented line per field so a mismatch shows the legible context name
+    over the opaque server URL, or just the server when the name is unknown."""
+    return f"  context: {name}\n  server:  {server}" if name else f"  {server}"
 
 
 def assert_context_matches():
@@ -152,10 +169,10 @@ def assert_context_matches():
     than the user's current context. Skip silently when there's no current
     context or the pinned file can't be read — those aren't this hook's call to
     block; the wrapper's own checks handle a broken/absent pinned config."""
-    current = context_server([], os.environ)
+    current_name, current = context_info([], os.environ)
     if not current:
         return
-    pinned = context_server(
+    pinned_name, pinned = context_info(
         ["--kubeconfig", KUBECONFIG], {**os.environ, "KUBECONFIG": KUBECONFIG})
     if pinned and pinned != current:
         print(json.dumps({
@@ -167,8 +184,10 @@ def assert_context_matches():
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
                 "permissionDecisionReason": (
-                    f"kubectl-readonly: current context points at\n  {current}\n"
-                    f"but the pinned read-only kubeconfig is for\n  {pinned}\n"
+                    f"kubectl-readonly: current context points at\n"
+                    f"{_describe(current_name, current)}\n"
+                    f"but the pinned read-only kubeconfig is for\n"
+                    f"{_describe(pinned_name, pinned)}\n"
                     "re-provision against the current context before reading.\n"
                     f"{PROVISION_HINT}"
                 ),

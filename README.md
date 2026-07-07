@@ -152,11 +152,25 @@ can't read its own kubeconfig and the plugin can't talk to the cluster at all.
 
 ## Tests
 
-`tests/test_hooks.py` covers the command-matching logic both hooks use to
-decide what they gate on (quoting, env-assignment prefixes, redirect targets,
-substitutions, multi-line commands). Run with the same interpreter the hooks
-use — no third-party dependencies:
+One test module per script, all mocked at the `subprocess` boundary — nothing
+touches a real cluster:
+
+- `tests/test_deny_kubectl.py` — the bare-`kubectl`/`k` matcher (quoting,
+  env-assignment prefixes, redirect targets, substitutions, multi-line
+  commands, heredocs) and hook-payload extraction.
+- `tests/test_block_context_mismatch.py` — the `kubectl-readonly` matcher,
+  context-name/server extraction, and the deny message on a cluster mismatch;
+  also asserts both hooks' copies of the matcher never drift apart.
+- `tests/test_kubectl_readonly.py` — the wrapper's fail-closed checks: pinned
+  kubeconfig enforcement, token expiry (static secrets rejected), read-only
+  RBAC verification, and blocked redirect flags.
+- `tests/test_kubeconfig_generator.py` — cluster-details extraction, the
+  pre-mint RBAC probe, and kubeconfig rendering (0600 permissions, symlink
+  refusal).
+
+Run from the repo root with the same interpreter the scripts use — no
+third-party dependencies:
 
 ```sh
-python3 tests/test_hooks.py
+python3 -m unittest discover -s tests
 ```

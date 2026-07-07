@@ -24,6 +24,17 @@ wrapper, which pins `$HOME/.kube/ai-agent.kubeconfig` for the `ai-agent`
 ServiceAccount in the `default` namespace (`view` ClusterRole + `eks:nodewatcher`
 for node watching).
 
+## Naming the cluster in what you report
+
+When you tell the user *which* cluster you looked at, name it by its **current
+context** — `kubectl-readonly config current-context` (e.g. `arn:aws:eks:<region>:<account-id>:cluster/<name>`).
+That's the human-readable label they set and recognize. Never identify a cluster
+by its region alone ("the eu-north-1 cluster") — many clusters share a region, so
+the region names nothing. And never identify it by the EKS API server hostname
+(`<hash>.gr7.<region>.eks.amazonaws.com`) — that opaque hash is what the server
+URL carries, but it's meaningless to a human. Report the context name; if it
+genuinely helps, add the server URL in parentheses, but the name leads.
+
 ## Division of labor: targeted probes here, exploration in subagents
 
 This skill is for **targeted, bounded probes** whose small output you need
