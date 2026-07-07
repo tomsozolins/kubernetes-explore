@@ -1,0 +1,8 @@
+# python / uv
+__pycache__/
+.venv/
+.env
+
+# nix / direnv
+.direnv/
+result

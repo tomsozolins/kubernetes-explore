@@ -1,10 +1,6 @@
-#!/usr/bin/env python3
-#
-# Unit tests for hooks/deny-kubectl.py — the PreToolUse(Bash) hook that denies
-# bare 'kubectl' (and the 'k' alias). Run the whole suite with:
-#
-#   python3 -m unittest discover -s tests
-import unittest
+"""Unit tests for hooks/deny-kubectl.py — the PreToolUse(Bash) hook that denies
+bare 'kubectl' (and the 'k' alias)."""
+import pytest
 
 from tests import load_script
 
@@ -42,7 +38,13 @@ BARE_KUBECTL_CASES = [
     ('echo "a << b"\nkubectl get', True),                      # quoted << is not a heredoc
 ]
 
-ENV_ASSIGNMENT_CASES = [
+
+@pytest.mark.parametrize("command,expected", BARE_KUBECTL_CASES)
+def test_bare_kubectl_matcher(command, expected):
+    assert deny_kubectl.command_invokes(command, {"kubectl", "k"}) == expected
+
+
+@pytest.mark.parametrize("token,expected", [
     ("KUBECONFIG=/x", True),
     ("FOO=bar", True),
     ("_underscore=1", True),
@@ -50,39 +52,23 @@ ENV_ASSIGNMENT_CASES = [
     ("/usr/bin/kubectl", False),
     ("=novalue", False),
     ("1abc=x", False),                             # name can't start with a digit
-]
+])
+def test_is_env_assignment(token, expected):
+    assert deny_kubectl._is_env_assignment(token) == expected
 
 
-class TestCommandInvokes(unittest.TestCase):
-    def test_bare_kubectl_matcher(self):
-        for command, expected in BARE_KUBECTL_CASES:
-            with self.subTest(command=command):
-                self.assertEqual(
-                    deny_kubectl.command_invokes(command, {"kubectl", "k"}), expected)
+def test_bash_command_extracts_command():
+    payload = {"tool_name": "Bash", "tool_input": {"command": "kubectl get"}}
+    assert deny_kubectl.bash_command(payload) == "kubectl get"
 
 
-class TestEnvAssignment(unittest.TestCase):
-    def test_is_env_assignment(self):
-        for token, expected in ENV_ASSIGNMENT_CASES:
-            with self.subTest(token=token):
-                self.assertEqual(deny_kubectl._is_env_assignment(token), expected)
+def test_bash_command_non_bash_tool():
+    assert deny_kubectl.bash_command({"tool_name": "Read", "tool_input": {}}) == ""
 
 
-class TestBashCommand(unittest.TestCase):
-    def test_extracts_command(self):
-        payload = {"tool_name": "Bash", "tool_input": {"command": "kubectl get"}}
-        self.assertEqual(deny_kubectl.bash_command(payload), "kubectl get")
-
-    def test_non_bash_tool(self):
-        self.assertEqual(
-            deny_kubectl.bash_command({"tool_name": "Read", "tool_input": {}}), "")
-
-    def test_malformed_payloads(self):
-        for payload in [None, {}, {"tool_name": "Bash"},
-                        {"tool_name": "Bash", "tool_input": {"command": 5}}]:
-            with self.subTest(payload=payload):
-                self.assertEqual(deny_kubectl.bash_command(payload), "")
-
-
-if __name__ == "__main__":
-    unittest.main()
+@pytest.mark.parametrize("payload", [
+    None, {}, {"tool_name": "Bash"},
+    {"tool_name": "Bash", "tool_input": {"command": 5}},
+])
+def test_bash_command_malformed_payloads(payload):
+    assert deny_kubectl.bash_command(payload) == ""
