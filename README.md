@@ -152,14 +152,35 @@ can't read its own kubeconfig and the plugin can't talk to the cluster at all.
 
 ## Development
 
-The dev environment is pinned by `flake.nix` (Python 3.13 +
-[uv](https://docs.astral.sh/uv/)) and loads automatically via
-[direnv](https://direnv.net/) — run `direnv allow` once after cloning.
+### Requirements
+
+- **Python 3.13**
+- **[uv](https://docs.astral.sh/uv/)** — manages the virtualenv and dev
+  dependencies (currently just `pytest`).
+
+A system Python plus a `uv` install is enough to get started.
+[Nix](#nix-optional) offers a pinned, reproducible alternative, but is optional.
+
+### Setup and tests
+
+Create the virtualenv and install the dev dependencies, then run the tests from
+the repo root:
+
+```sh
+uv sync                    # creates .venv/ with pytest
+source .venv/bin/activate  # so `pytest` is on PATH
+pytest
+```
+
+(Or skip activation and run `uv run pytest`.)
 
 Tests live in `tests/` — one pytest module per script under `hooks/` and
 `bin/`, all mocked at the `subprocess` boundary, so nothing touches a real
-cluster. Run them from the repo root:
+cluster.
 
-```sh
-uv run pytest
-```
+### Nix (optional)
+
+`flake.nix` pins the exact toolchain (Python 3.13 + uv) for a reproducible dev
+environment. With [direnv](https://direnv.net/) it loads automatically — run
+`direnv allow` once after cloning and the shell provisions the `.venv` and puts
+`pytest` on your PATH. Without direnv, `nix develop` gives you the same shell.
