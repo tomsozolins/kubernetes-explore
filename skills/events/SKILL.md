@@ -2,6 +2,7 @@
 name: events
 context: fork
 agent: kubernetes-explore:events
+user-invocable: false
 allowed-tools: Bash(kubectl-readonly:*), Bash(kubeconfig-generator), WebSearch, WebFetch
 model: sonnet
 description: >-
