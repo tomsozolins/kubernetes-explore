@@ -1,36 +1,18 @@
 #!/usr/bin/env python3
 #
-# Unit tests for the kubernetes-explore PreToolUse(Bash) hooks. Run with the
-# same interpreter the hooks use:
+# Unit tests for hooks/deny-kubectl.py — the PreToolUse(Bash) hook that denies
+# bare 'kubectl' (and the 'k' alias). Run the whole suite with:
 #
-#   python3 tests/test_hooks.py
-#
-# Each hook is self-contained (no shared module), so the two carry their own
-# copy of command_invokes/bash_command. We load both by file path and assert
-# the copies agree, so a fix to one that isn't mirrored in the other fails here.
-import importlib.util
+#   python3 -m unittest discover -s tests
 import unittest
-from pathlib import Path
 
-_HOOKS = Path(__file__).resolve().parent.parent / "hooks"
+from tests import load_script
 
+deny_kubectl = load_script("hooks/deny-kubectl.py")
 
-def _load(filename: str):
-    """Import a hyphen-named hook script by path. The hooks guard their stdin
-    handling behind `if __name__ == '__main__'`, so importing only defines the
-    functions — nothing reads stdin or exits."""
-    path = _HOOKS / filename
-    spec = importlib.util.spec_from_file_location(path.stem.replace("-", "_"), path)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-deny_kubectl = _load("deny-kubectl.py")
-block_context_mismatch = _load("block-context-mismatch.py")
-
-# (command, whether it invokes a binary in {kubectl, k} at a command position)
+# (command, whether it invokes a binary in {kubectl, k} at a command position).
+# Also consumed by test_block_context_mismatch.py's agreement test, since both
+# hooks carry their own copy of command_invokes.
 BARE_KUBECTL_CASES = [
     ("kubectl get pods", True),
     ("k get pods", True),
@@ -60,14 +42,6 @@ BARE_KUBECTL_CASES = [
     ('echo "a << b"\nkubectl get', True),                      # quoted << is not a heredoc
 ]
 
-KUBECTL_READONLY_CASES = [
-    ("kubectl-readonly get pods", True),
-    ("kubectl get pods", False),
-    ("KUBECONFIG=/x kubectl-readonly get", True),
-    ('kube"ctl-readonly" get', True),
-    ("echo `kubectl-readonly get`", True),
-]
-
 ENV_ASSIGNMENT_CASES = [
     ("KUBECONFIG=/x", True),
     ("FOO=bar", True),
@@ -85,21 +59,6 @@ class TestCommandInvokes(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(
                     deny_kubectl.command_invokes(command, {"kubectl", "k"}), expected)
-
-    def test_kubectl_readonly_matcher(self):
-        for command, expected in KUBECTL_READONLY_CASES:
-            with self.subTest(command=command):
-                self.assertEqual(
-                    block_context_mismatch.command_invokes(
-                        command, {"kubectl-readonly"}), expected)
-
-    def test_both_copies_agree(self):
-        names = {"kubectl", "k", "kubectl-readonly"}
-        for command, _ in BARE_KUBECTL_CASES + KUBECTL_READONLY_CASES:
-            with self.subTest(command=command):
-                self.assertEqual(
-                    deny_kubectl.command_invokes(command, names),
-                    block_context_mismatch.command_invokes(command, names))
 
 
 class TestEnvAssignment(unittest.TestCase):
