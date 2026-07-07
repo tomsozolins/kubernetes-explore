@@ -2,6 +2,7 @@
 name: logs
 context: fork
 agent: kubernetes-explore:logs
+user-invocable: false
 allowed-tools: Bash(kubectl-readonly:*), Bash(kubeconfig-generator), WebSearch, WebFetch
 model: sonnet
 description: >-
