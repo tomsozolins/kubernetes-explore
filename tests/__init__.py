@@ -1,13 +1,3 @@
-#!/usr/bin/env python3
-#
-# Test package for the kubernetes-explore plugin scripts — one test module per
-# script under hooks/ and bin/. Run from the repo root:
-#
-#   python3 -m unittest discover -s tests
-#
-# The scripts under test are hyphen-named (hooks/deny-kubectl.py) or
-# extension-less (bin/kubectl-readonly), so none is importable by name; the
-# package-level load_script imports them by path.
 import importlib.machinery
 import importlib.util
 import re
