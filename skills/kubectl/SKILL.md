@@ -3,14 +3,16 @@ name: kubectl
 allowed-tools: Bash(kubectl-readonly:*), Bash(kubeconfig-generator), WebSearch, WebFetch
 model: sonnet
 description: >-
-  Inspect and debug the current kubectl context's Kubernetes / EKS cluster (pods, deployments,
-  services, events, logs, nodes, resource usage). Use this skill whenever the
-  user wants to look at, troubleshoot, or report on cluster state — "what's
-  wrong with the cluster", "why is this pod crashing", "check the deployment",
-  "are the nodes healthy", "show me the logs", "what's running in namespace X" —
-  even if they don't say "kubectl". Cluster access here goes through the
-  read-only `kubectl-readonly` wrapper, NOT bare `kubectl` (which is blocked).
-  This skill also owns the reference RBAC manifest
+  Run targeted, bounded read-only queries against the current kubectl context's
+  Kubernetes / EKS cluster — inspect specific pods, deployments, services,
+  nodes, or object fields when the user asks what's running or wants a
+  specific object's state ("check the deployment", "are the nodes healthy",
+  "what's running in namespace X", "get this pod's status"), even if they
+  don't say "kubectl". Cluster access here goes through the read-only
+  `kubectl-readonly` wrapper, NOT bare `kubectl` (which is blocked). For
+  symptom-to-root-cause investigation ("what's wrong", "why is X failing /
+  crashing"), use the `troubleshoot` skill instead — it orchestrates the full
+  fan-out. This skill also owns the reference RBAC manifest
   (`references/ai-agent-rbac.yaml`) that provisions the read-only `ai-agent`
   ServiceAccount — read it before adding or editing that SA's RBAC in a GitOps
   repo, rather than hand-deriving one.
