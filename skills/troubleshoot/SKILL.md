@@ -1,6 +1,6 @@
 ---
 name: troubleshoot
-model: sonnet
+model: opus
 description: >-
   Troubleshoot anything running in the current kubectl context's Kubernetes
   cluster — failing, restarting, or crash-looping pods, errors, slowness,
