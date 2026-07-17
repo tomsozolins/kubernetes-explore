@@ -10,7 +10,7 @@ import pytest
 
 from tests import load_script
 
-gen = load_script("bin/kubeconfig-generator")
+gen = load_script("plugins/kubernetes-explore/bin/kubeconfig-generator")
 
 
 def completed(returncode=0, stdout="", stderr=""):

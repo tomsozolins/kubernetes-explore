@@ -29,7 +29,8 @@ configure the sandbox (below) and mint the read-only kubeconfig with
 ## Update
 
 New versions land as commits that bump `version` in
-`.claude-plugin/plugin.json`. To pull the latest, refresh the marketplace and
+`plugins/kubernetes-explore/.claude-plugin/plugin.json`. To pull the latest,
+refresh the marketplace and
 update the plugin from the `/plugin` menu:
 
 ```text
@@ -124,6 +125,9 @@ can't read its own kubeconfig and the plugin can't talk to the cluster at all.
 
 ## How the pieces fit
 
+The plugin ships from `plugins/kubernetes-explore/`; the component paths below
+are relative to that plugin root.
+
 - `bin/kubectl-readonly` — the choke point; validates the pinned kubeconfig
   (live, expiring, correct identity, read-only RBAC) on every call, then execs
   `kubectl`.
@@ -174,9 +178,9 @@ pytest
 
 (Or skip activation and run `uv run pytest`.)
 
-Tests live in `tests/` — one pytest module per script under `hooks/` and
-`bin/`, all mocked at the `subprocess` boundary, so nothing touches a real
-cluster.
+Tests live in `tests/` — one pytest module per script under
+`plugins/kubernetes-explore/hooks/` and `plugins/kubernetes-explore/bin/`, all
+mocked at the `subprocess` boundary, so nothing touches a real cluster.
 
 ### Nix (optional)
 
