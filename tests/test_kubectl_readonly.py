@@ -10,7 +10,7 @@ import pytest
 
 from tests import load_script
 
-wrapper = load_script("bin/kubectl-readonly")
+wrapper = load_script("plugins/kubernetes-explore/bin/kubectl-readonly")
 
 RBAC_HEADER = "Resources  Non-Resource URLs  Resource Names  Verbs\n"
 

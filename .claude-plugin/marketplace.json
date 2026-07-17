@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "kubernetes-explore",
-      "source": "./",
+      "source": "./plugins/kubernetes-explore",
       "description": "A kubernetes explorer plugin"
     }
   ]

@@ -10,7 +10,7 @@ import pytest
 from tests import load_script
 from tests.test_deny_kubectl import BARE_KUBECTL_CASES, deny_kubectl
 
-hook = load_script("hooks/block-context-mismatch.py")
+hook = load_script("plugins/kubernetes-explore/hooks/block-context-mismatch.py")
 
 # (command, whether it invokes kubectl-readonly at a command position)
 KUBECTL_READONLY_CASES = [

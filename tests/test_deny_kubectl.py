@@ -4,7 +4,7 @@ import pytest
 
 from tests import load_script
 
-deny_kubectl = load_script("hooks/deny-kubectl.py")
+deny_kubectl = load_script("plugins/kubernetes-explore/hooks/deny-kubectl.py")
 
 # (command, whether it invokes a binary in {kubectl, k} at a command position).
 # Also consumed by test_block_context_mismatch.py's agreement test, since both
